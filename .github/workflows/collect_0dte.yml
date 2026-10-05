@@ -2,13 +2,24 @@ name: Raccolta dati 0DTE SPX
 
 on:
   schedule:
-    - cron: '*/15 13-19 * * 1-5'
-    - cron: '0 20 * * 1-5'
+    # Trigger di riserva: il trigger principale e' cron-job.org (workflow_dispatch).
+    # Minuti 17 e 47 (non :00/:30) perche' GitHub salta spesso i giri a inizio ora.
+    # La finestra 13-21 UTC copre sia ora legale sia ora solare USA: l'orario di
+    # mercato vero lo controlla lo script (fuso America/New_York).
+    - cron: '17,47 13-21 * * 1-5'
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect-0dte
+  cancel-in-progress: false
 
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -16,18 +27,21 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Installa dipendenze
-        run: pip install requests
+          python-version: '3.12'
 
       - name: Raccogli snapshot 0DTE
         run: python collect_0dte.py
 
       - name: Salva i dati nel repo (commit automatico)
         run: |
+          mkdir -p data
           git config user.name "0dte-bot"
           git config user.email "actions@github.com"
-          git add 0dte_history.csv
-          git diff --staged --quiet || git commit -m "Snapshot 0DTE $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git push
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Nessun nuovo dato da salvare"
+          else
+            git commit -m "Snapshot 0DTE $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git pull --rebase
+            git push
+          fi
