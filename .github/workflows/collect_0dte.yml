@@ -1,12 +1,6 @@
 name: Raccolta dati 0DTE SPX
 
 on:
-  schedule:
-    # Trigger di riserva: il trigger principale e' cron-job.org (workflow_dispatch).
-    # Minuti 17 e 47 (non :00/:30) perche' GitHub salta spesso i giri a inizio ora.
-    # La finestra 13-21 UTC copre sia ora legale sia ora solare USA: l'orario di
-    # mercato vero lo controlla lo script (fuso America/New_York).
-    - cron: '17,47 13-21 * * 1-5'
   workflow_dispatch:
 
 permissions:
