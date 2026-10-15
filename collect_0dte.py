@@ -1,5 +1,5 @@
 """
-collect_0dte.py  (v2)
+collect_0dte.py  (v3)
 =====================
 Raccoglie uno snapshot della catena opzioni SPX/SPXW con scadenza OGGI (0DTE)
 dal feed gratuito CBOE e lo salva in due posti:
@@ -8,7 +8,15 @@ dal feed gratuito CBOE e lo salva in due posti:
   data/strikes_YYYY-MM-DD.csv     una riga per contratto per snapshot
                                   (solo strike entro +/- BAND_PCT dallo spot)
 
-Differenze rispetto alla v1:
+Novita' della v3 (colonne aggiunte IN FONDO al summary, quelle vecchie invariate):
+  * n_contracts_all, gex_all_calls, gex_all_puts, net_gex_all, gex_all_norm:
+    stesso GEX ma su TUTTE le scadenze della catena (la letteratura usa questa)
+  * quality: "ok" oppure i motivi per cui lo snapshot non e' affidabile:
+    apertura (prima delle 10:00 NY), spot (parity e campo CBOE distanti > 0,1%),
+    spot_mancante, gex_zero
+  * al primo avvio il summary esistente riceve le colonne nuove (vuote per le righe vecchie)
+
+Differenze della v2 rispetto alla v1:
   * salva i dati per strike (la v1 teneva solo i totali)
   * l'orario di mercato e' controllato DENTRO lo script, in fuso America/New_York:
     il cambio dell'ora legale non richiede piu' nessuna modifica
@@ -41,6 +49,8 @@ MARKET_CLOSE = dtime(16, 15)  # ora di New York
 MIN_GAP_SECONDS = 9 * 60      # sotto questa distanza dall'ultimo snapshot: salta
 BAND_PCT = 0.07               # strike salvati: spot +/- 7%
 MULTIPLIER = 100
+OPENING_UNRELIABLE_UNTIL = dtime(10, 0)  # prima di quest'ora (NY) lo snapshot e' segnato "apertura"
+SPOT_MISMATCH_PCT = 0.001     # spot parity vs campo CBOE: oltre lo 0,1% lo snapshot e' segnato "spot"
 
 DATA_DIR = "data"
 SUMMARY_NAME = "summary_0dte.csv"
@@ -52,6 +62,10 @@ SUMMARY_FIELDS = [
     "spot_cboe_field", "n_contracts", "oi_calls", "oi_puts", "pc_oi_ratio",
     "vol_calls", "vol_puts", "pc_vol_ratio", "iv_atm",
     "gex_calls", "gex_puts", "net_gex", "gex_norm",
+    # v3: gamma su TUTTE le scadenze (stessa formula, stesso segno call +, put -)
+    "n_contracts_all", "gex_all_calls", "gex_all_puts", "net_gex_all", "gex_all_norm",
+    # v3: qualita' dello snapshot: "ok" oppure motivi separati da ";"
+    "quality",
 ]
 STRIKE_FIELDS = [
     "snapshot_utc", "cboe_timestamp", "spot_parity", "root", "type", "strike",
@@ -113,9 +127,31 @@ def last_snapshot_utc(summary_path):
         return None
 
 
+def upgrade_header(path, fieldnames):
+    """Se il file ha un'intestazione vecchia (meno colonne), la riscrive aggiungendo le colonne
+    nuove in fondo, vuote per le righe gia' salvate. Le colonne e i valori esistenti non cambiano."""
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        old = reader.fieldnames or []
+        if old == fieldnames:
+            return
+        if old != fieldnames[:len(old)]:
+            raise SystemExit(f"Intestazione inattesa in {path}: non la tocco. Controllare a mano.")
+        rows = list(reader)
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+    os.replace(tmp, path)
+    print(f"{path}: aggiunte le colonne {fieldnames[len(old):]}")
+
+
 def append_rows(path, fieldnames, rows):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     new_file = not os.path.isfile(path)
+    if not new_file:
+        upgrade_header(path, fieldnames)
     with open(path, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         if new_file:
@@ -145,17 +181,18 @@ def should_run(now_utc, outdir=DATA_DIR, force=False):
 # ----------------------------------------------------------------------------
 # elaborazione
 # ----------------------------------------------------------------------------
-def extract_contracts(chain_json, today):
+def extract_contracts(chain_json, today=None):
+    """Contratti con scadenza `today`; con today=None tutte le scadenze (gia' scadute escluse)."""
     out = []
     for o in chain_json.get("data", {}).get("options", []):
         p = parse_symbol(o.get("option"))
         if p is None:
             continue
         root, expiry, cp, strike = p
-        if expiry != today:
+        if today is not None and expiry != today:
             continue
         out.append({
-            "root": root, "cp": cp, "strike": strike,
+            "root": root, "expiry": expiry, "cp": cp, "strike": strike,
             "bid": num(o.get("bid")), "ask": num(o.get("ask")),
             "iv": num(o.get("iv")), "delta": num(o.get("delta")),
             "gamma": num(o.get("gamma")), "vega": num(o.get("vega")),
@@ -196,8 +233,38 @@ def atm_iv(contracts, spot):
     return sum(ivs) / len(ivs)
 
 
-def summarize(chain_json, contracts, spot, now_utc, today):
-    oi_c = oi_p = vol_c = vol_p = gex_c = gex_p = 0.0
+def gex(contracts, spot):
+    """GEX in $ per 1% di movimento: gamma * OI * 100 * spot^2 * 0.01. Ritorna (call, put)."""
+    gex_c = gex_p = 0.0
+    if not spot:
+        return gex_c, gex_p
+    for c in contracts:
+        oi = c["oi"] or 0.0
+        if c["gamma"] is not None and oi > 0:
+            g = c["gamma"] * oi * MULTIPLIER * spot ** 2 * 0.01
+            if c["cp"] == "C":
+                gex_c += g
+            else:
+                gex_p += g
+    return gex_c, gex_p
+
+
+def quality_flags(now_utc, spot, spot_cboe, gex_c, gex_p):
+    """Motivi per cui lo snapshot non e' affidabile ("ok" se nessuno)."""
+    flags = []
+    if now_utc.astimezone(ET).time() < OPENING_UNRELIABLE_UNTIL:
+        flags.append("apertura")
+    if spot is None:
+        flags.append("spot_mancante")
+    elif spot_cboe and abs(spot - spot_cboe) / spot_cboe > SPOT_MISMATCH_PCT:
+        flags.append("spot")
+    if gex_c + gex_p == 0:
+        flags.append("gex_zero")
+    return ";".join(flags) if flags else "ok"
+
+
+def summarize(chain_json, contracts, spot, now_utc, today, all_contracts=()):
+    oi_c = oi_p = vol_c = vol_p = 0.0
     for c in contracts:
         oi, vol = c["oi"] or 0.0, c["volume"] or 0.0
         if c["cp"] == "C":
@@ -206,14 +273,16 @@ def summarize(chain_json, contracts, spot, now_utc, today):
         else:
             oi_p += oi
             vol_p += vol
-        if spot and c["gamma"] is not None and oi > 0:
-            g = c["gamma"] * oi * MULTIPLIER * spot ** 2 * 0.01
-            if c["cp"] == "C":
-                gex_c += g
-            else:
-                gex_p += g
+    gex_c, gex_p = gex(contracts, spot)
     gross = gex_c + gex_p
     iv_atm = atm_iv(contracts, spot)
+
+    spot_cboe = num(chain_json.get("data", {}).get("current_price"))
+    # tutte le scadenze: se manca lo spot da parity si usa il campo CBOE (segnalato in quality)
+    spot_all = spot or spot_cboe
+    live = [c for c in all_contracts if c["expiry"] >= today]
+    gall_c, gall_p = gex(live, spot_all)
+    gross_all = gall_c + gall_p
     return {
         "snapshot_utc": now_utc.replace(microsecond=0).isoformat(),
         "snapshot_et": now_utc.astimezone(ET).strftime("%Y-%m-%d %H:%M:%S"),
@@ -230,6 +299,11 @@ def summarize(chain_json, contracts, spot, now_utc, today):
         "gex_calls": round(gex_c), "gex_puts": round(gex_p),
         "net_gex": round(gex_c - gex_p),
         "gex_norm": round((gex_c - gex_p) / gross, 4) if gross > 0 else "",
+        "n_contracts_all": len(live),
+        "gex_all_calls": round(gall_c), "gex_all_puts": round(gall_p),
+        "net_gex_all": round(gall_c - gall_p),
+        "gex_all_norm": round((gall_c - gall_p) / gross_all, 4) if gross_all > 0 else "",
+        "quality": quality_flags(now_utc, spot, spot_cboe, gex_c, gex_p),
     }
 
 
@@ -256,18 +330,20 @@ def strike_rows(contracts, spot, now_utc, cboe_ts):
 
 def process(chain_json, now_utc, outdir=DATA_DIR):
     today = now_utc.astimezone(ET).date()
-    contracts = extract_contracts(chain_json, today)
+    all_contracts = extract_contracts(chain_json)
+    contracts = [c for c in all_contracts if c["expiry"] == today]
     if not contracts:
         print(f"Nessun contratto con scadenza {today}: niente da salvare.")
         return None
     spot = estimate_spot(contracts)
-    summary = summarize(chain_json, contracts, spot, now_utc, today)
+    summary = summarize(chain_json, contracts, spot, now_utc, today, all_contracts)
     rows = strike_rows(contracts, spot, now_utc, chain_json.get("timestamp"))
     append_rows(os.path.join(outdir, SUMMARY_NAME), SUMMARY_FIELDS, [summary])
     if rows:
         append_rows(os.path.join(outdir, f"strikes_{today}.csv"), STRIKE_FIELDS, rows)
     print(f"Salvato snapshot: {len(contracts)} contratti 0DTE, spot~{summary['spot_parity']}, "
-          f"{len(rows)} righe per strike, net_gex={summary['net_gex']}")
+          f"{len(rows)} righe per strike, net_gex={summary['net_gex']}, "
+          f"net_gex_all={summary['net_gex_all']}, quality={summary['quality']}")
     return summary
 
 
