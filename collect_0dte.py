@@ -1,5 +1,5 @@
 """
-collect_0dte.py  (v3)
+collect_0dte.py  (v4)
 =====================
 Raccoglie uno snapshot della catena opzioni SPX/SPXW con scadenza OGGI (0DTE)
 dal feed gratuito CBOE e lo salva in due posti:
@@ -7,6 +7,12 @@ dal feed gratuito CBOE e lo salva in due posti:
   data/summary_0dte.csv           una riga per snapshot: totali, ATM IV, GEX
   data/strikes_YYYY-MM-DD.csv     una riga per contratto per snapshot
                                   (solo strike entro +/- BAND_PCT dallo spot)
+
+Novita' della v4:
+  * il VENERDI' dalle 15:00 NY salva anche le opzioni SPXW della scadenza successiva (di solito
+    lunedi', martedi' se lunedi' e' festivo) in data/next_expiry_YYYY-MM-DD.csv (data = venerdi'),
+    stesse colonne dei file strikes piu' "expiry" in fondo. Servono per misurare il premio del
+    weekend con prezzi veri. I file 0DTE e il summary non cambiano.
 
 Novita' della v3 (colonne aggiunte IN FONDO al summary, quelle vecchie invariate):
   * n_contracts_all, gex_all_calls, gex_all_puts, net_gex_all, gex_all_norm:
@@ -51,6 +57,8 @@ BAND_PCT = 0.07               # strike salvati: spot +/- 7%
 MULTIPLIER = 100
 OPENING_UNRELIABLE_UNTIL = dtime(10, 0)  # prima di quest'ora (NY) lo snapshot e' segnato "apertura"
 SPOT_MISMATCH_PCT = 0.001     # spot parity vs campo CBOE: oltre lo 0,1% lo snapshot e' segnato "spot"
+NEXT_EXPIRY_WEEKDAY = 4       # venerdi': si salva anche la scadenza successiva (premio del weekend)
+NEXT_EXPIRY_FROM = dtime(15, 0)  # ... solo dalle 15:00 NY in poi
 
 DATA_DIR = "data"
 SUMMARY_NAME = "summary_0dte.csv"
@@ -71,6 +79,7 @@ STRIKE_FIELDS = [
     "snapshot_utc", "cboe_timestamp", "spot_parity", "root", "type", "strike",
     "bid", "ask", "iv", "delta", "gamma", "vega", "theta", "volume", "open_interest",
 ]
+NEXT_FIELDS = STRIKE_FIELDS + ["expiry"]
 
 
 # ----------------------------------------------------------------------------
@@ -328,6 +337,21 @@ def strike_rows(contracts, spot, now_utc, cboe_ts):
     return rows
 
 
+def next_expiry_rows(all_contracts, today, spot, now_utc, cboe_ts):
+    """Il venerdi' dalle 15:00 NY: righe per strike della prima scadenza SPXW dopo oggi."""
+    now_et = now_utc.astimezone(ET)
+    if now_et.weekday() != NEXT_EXPIRY_WEEKDAY or now_et.time() < NEXT_EXPIRY_FROM:
+        return [], None
+    later = [c for c in all_contracts if c["expiry"] > today and c["root"] == "SPXW"]
+    if not later:
+        return [], None
+    nxt = min(c["expiry"] for c in later)
+    rows = strike_rows([c for c in later if c["expiry"] == nxt], spot, now_utc, cboe_ts)
+    for r in rows:
+        r["expiry"] = str(nxt)
+    return rows, nxt
+
+
 def process(chain_json, now_utc, outdir=DATA_DIR):
     today = now_utc.astimezone(ET).date()
     all_contracts = extract_contracts(chain_json)
@@ -341,6 +365,10 @@ def process(chain_json, now_utc, outdir=DATA_DIR):
     append_rows(os.path.join(outdir, SUMMARY_NAME), SUMMARY_FIELDS, [summary])
     if rows:
         append_rows(os.path.join(outdir, f"strikes_{today}.csv"), STRIKE_FIELDS, rows)
+    nrows, nxt = next_expiry_rows(all_contracts, today, spot, now_utc, chain_json.get("timestamp"))
+    if nrows:
+        append_rows(os.path.join(outdir, f"next_expiry_{today}.csv"), NEXT_FIELDS, nrows)
+        print(f"Scadenza successiva {nxt}: {len(nrows)} righe per strike")
     print(f"Salvato snapshot: {len(contracts)} contratti 0DTE, spot~{summary['spot_parity']}, "
           f"{len(rows)} righe per strike, net_gex={summary['net_gex']}, "
           f"net_gex_all={summary['net_gex_all']}, quality={summary['quality']}")
