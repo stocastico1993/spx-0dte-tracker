@@ -43,6 +43,7 @@ import re
 import statistics
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone, time as dtime
 from zoneinfo import ZoneInfo
@@ -94,18 +95,31 @@ def num(x, default=None):
         return default
 
 
+class LogRedirect(urllib.request.HTTPRedirectHandler):
+    """Segue i redirect come prima, ma li scrive nel log (diagnosi dei 302 + 403 dal 20/11/2026)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        print(f"Redirect {code} da {req.full_url} a {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def fetch_chain(retries=3):
     req = urllib.request.Request(
         CBOE_URL, headers={"User-Agent": "Mozilla/5.0 (compatible; 0dte-tracker/2.0)"}
     )
+    opener = urllib.request.build_opener(LogRedirect())
     last_err = None
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with opener.open(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as e:  # rete, JSON, timeout...
             last_err = e
             print(f"Tentativo {attempt + 1}/{retries} fallito: {e}")
+            if isinstance(e, urllib.error.HTTPError):
+                corpo = e.read(500).decode("utf-8", "replace").replace("\n", " ")
+                print(f"  risposta {e.code} da {e.url}")
+                print(f"  intestazioni: {dict(e.headers)}")
+                print(f"  inizio del corpo: {corpo}")
             time.sleep(2 * (attempt + 1))
     raise last_err
 
