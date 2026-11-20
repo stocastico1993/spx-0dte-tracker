@@ -12,6 +12,10 @@ concurrency:
 
 jobs:
   collect:
+    # Raccolta sospesa dal 20/11/2026: CBOE ha messo il feed dietro Cloudflare (403).
+    # Gli avvii esterni (cron-job.org) risultano "skipped" invece di "failure".
+    # Per riattivarla togliere questa riga.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
