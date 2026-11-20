@@ -35,6 +35,22 @@ Questi giorni hanno generato l'ipotesi e **non** valgono come prova.
   3. lo stesso test con `gex_all_norm` (tutte le scadenze), disponibile dal 15/10.
 - **Ipotesi confermata se:** il test principale è significativo **e** il segno del controllo 2 resta negativo.
 
+### Aggiornamento 20/11/2026: raccolta interrotta, test su meno giorni
+
+- Dal 20/11/2026 alle 14:30 UTC CBOE reindirizza il feed gratuito (`cdn.cboe.com`) a
+  `cdn-api.cboe.com`, che sta dietro la protezione anti-bot di Cloudflare ("Attention Required!") e
+  risponde 403 al collettore. È un blocco voluto: non lo si aggira.
+- Una fonte ufficiale, gratuita e senza registrazione con OI e IV per strike non esiste. Si è
+  scelto quindi di **fermare la raccolta** e di tenere i dati raccolti.
+- **Ultimo giorno di dati:** 19/11/2026. **Giorni di verifica disponibili:** 19 (dal 26/10 al 19/11),
+  invece dei circa 40 previsti.
+- **Cambio di regola, deciso prima di guardare i risultati e solo per mancanza di dati:** il test
+  si fa sui 19 giorni di verifica disponibili, con le stesse regole qui sopra. Il risultato va
+  letto come **indicativo**: con 19 giorni si vede solo un effetto forte (correlazione intorno a
+  −0,5 o più), non uno medio.
+- **Trasparenza:** il 04/11/2026 si è guardato una volta, in modo informale, l'andamento dei primi 8
+  giorni di verifica (nessun effetto visibile). Le regole non sono state cambiate dopo quel controllo.
+
 ### Limiti noti
 
 - L'OI CBOE è fisso per tutta la giornata: il GEX intraday cambia solo per spot e gamma.
