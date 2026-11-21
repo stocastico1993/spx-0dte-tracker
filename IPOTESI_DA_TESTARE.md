@@ -51,6 +51,25 @@ Questi giorni hanno generato l'ipotesi e **non** valgono come prova.
 - **Trasparenza:** il 04/11/2026 si è guardato una volta, in modo informale, l'andamento dei primi 8
   giorni di verifica (nessun effetto visibile). Le regole non sono state cambiate dopo quel controllo.
 
+### Esito del test (21/11/2026): H1 NON CONFERMATA
+
+Script: `python3 analisi/test_h1.py`, regole invariate, 19 giorni di verifica (26/10 – 19/11/2026).
+
+| | giorni | range medio | range mediano |
+|---|---|---|---|
+| GEX negativo alle 10:00 | 11 | 1,08% | 0,89% |
+| GEX positivo alle 10:00 | 8 | 1,07% | 0,84% |
+
+- **Test principale (Mann–Whitney, una coda):** U = 46 su 88, **p = 0,46**. Nessuna differenza.
+- Contorno 1, Spearman `gex_norm` / range: −0,24 (p 0,16). Nella direzione attesa ma non significativo.
+- Contorno 2, regressione con la IV: coefficiente del GEX −0,28, IC 90% da −1,44 a +0,86 (comprende lo zero).
+- Contorno 3, `gex_all_norm` (tutte le scadenze): Mann–Whitney p = 0,033 e Spearman −0,52 (p 0,009),
+  ma con solo 3 giorni positivi su 19. A parità di IV la correlazione scende a −0,34, perché GEX su
+  tutte le scadenze e IV si muovono insieme (−0,67). È un test di contorno, uno fra diversi: non
+  decide l'esito. Resta solo come spunto per un eventuale studio futuro.
+- **Lettura:** con 19 giorni il test vedeva solo un effetto forte, e un effetto forte non c'è. Il
+  segnale dei giorni di scoperta (p 0,11 sul test principale, Spearman −0,57) non si ripete.
+
 ### Limiti noti
 
 - L'OI CBOE è fisso per tutta la giornata: il GEX intraday cambia solo per spot e gamma.
