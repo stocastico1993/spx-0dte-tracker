@@ -1,21 +1,21 @@
-Dati: 2025-06-13 -> 2026-11-25, 378 giorni
-Episodi totali (chiusura >= 30, con riarmo < 25): 2
-  completi (20 giorni osservati): 1
+Dati: 1997-10-27 -> 2026-11-25, 5378 giorni
+Episodi totali (chiusura >= 30, con riarmo < 25): 26
+  completi (20 giorni osservati): 25
   in corso / finestra incompleta, esclusi dai tassi: 1
 
-Soglia di rientro < 25 (n = 1 episodi completi)
-  rientro entro  5 giorni: 1/1 = 100.0%  (IC 95% Wilson 20.7-100.0%)
-  rientro entro 10 giorni: 1/1 = 100.0%  (IC 95% Wilson 20.7-100.0%)
-  rientro entro 20 giorni: 1/1 = 100.0%  (IC 95% Wilson 20.7-100.0%)
-  mediana giorni di rientro (solo rientrati, 1): 3.0
+Soglia di rientro < 25 (n = 25 episodi completi)
+  rientro entro  5 giorni: 6/25 =  24.0%  (IC 95% Wilson 11.5-43.4%)
+  rientro entro 10 giorni: 10/25 =  40.0%  (IC 95% Wilson 23.4-59.3%)
+  rientro entro 20 giorni: 14/25 =  56.0%  (IC 95% Wilson 37.1-73.3%)
+  mediana giorni di rientro (solo rientrati, 14): 6.5
 
-Soglia di rientro < 20 (n = 1 episodi completi)
-  rientro entro  5 giorni: 0/1 =   0.0%  (IC 95% Wilson  0.0-79.3%)
-  rientro entro 10 giorni: 1/1 = 100.0%  (IC 95% Wilson 20.7-100.0%)
-  rientro entro 20 giorni: 1/1 = 100.0%  (IC 95% Wilson 20.7-100.0%)
+Soglia di rientro < 20 (n = 25 episodi completi)
+  rientro entro  5 giorni: 0/25 =   0.0%  (IC 95% Wilson  0.0-13.3%)
+  rientro entro 10 giorni: 1/25 =   4.0%  (IC 95% Wilson  0.7-19.5%)
+  rientro entro 20 giorni: 1/25 =   4.0%  (IC 95% Wilson  0.7-19.5%)
   mediana giorni di rientro (solo rientrati, 1): 9.0
 
-Escalation (n = 1 episodi completi)
-  picco nei 20 giorni >= 40: 0/1 =   0.0%  (IC 95%  0.0-79.3%)
-  picco nei 20 giorni >= 50: 0/1 =   0.0%  (IC 95%  0.0-79.3%)
-  mediana del picco nei 20 giorni: 30.6
+Escalation (n = 25 episodi completi)
+  picco nei 20 giorni >= 40: 6/25 =  24.0%  (IC 95% 11.5-43.4%)
+  picco nei 20 giorni >= 50: 1/25 =   4.0%  (IC 95%  0.7-19.5%)
+  mediana del picco nei 20 giorni: 33.0
