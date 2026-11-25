@@ -1,0 +1,3 @@
+data_inizio,chiusura_inizio,completo,giorni_rientro_25,giorni_rientro_20,picco_20g,giorno_picco,escalation_40,escalation_50
+2026-03-27,31.05,True,3,9,30.61,1,False,False
+2026-11-20,35.89,False,,,31.03,3,False,False
